@@ -435,7 +435,7 @@
         <label class="span-2">Observações<input name="observacao" placeholder="Ex.: sazonalidade, padrão, restrição ou entrega" /></label>
         <div class="actions"><button class="btn" type="submit">Adicionar à planilha</button></div>
       </form></div>
-      <div class="card no-print"><div class="sheet-toolbar"><div><h2>Filtros da planilha</h2><p class="sheet-note">Use período e canal de venda para localizar rapidamente os produtos aplicáveis.</p></div><div class="actions"><button class="btn secondary" id="exportProdutosBtn" type="button">Baixar CSV</button></div></div><form class="form-grid" id="produtoFiltroForm">
+      <div class="card no-print"><div class="sheet-toolbar"><div><h2>Filtros e importação da planilha</h2><p class="sheet-note">Use período e canal de venda para localizar produtos. Para upload, use CSV com cabeçalhos iguais ao modelo.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtn" type="button">Baixar modelo CSV</button><button class="btn secondary" id="importProdutosBtn" type="button">Importar CSV</button><button class="btn secondary" id="exportProdutosBtn" type="button">Baixar CSV</button><input id="produtosCsvInput" type="file" accept=".csv,text/csv" hidden /></div></div><form class="form-grid" id="produtoFiltroForm">
         <label class="span-2">Buscar produto, código, grupo ou lote<input name="busca" value="${escapeHtml(produtosFiltro.busca)}" placeholder="Digite para pesquisar" /></label>
         <label>Canal<select name="canal"><option value="">Todos</option>${canais.map(c => `<option value="${c}" ${produtosFiltro.canal === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
         <label>Data inicial<input name="dataInicial" type="date" value="${escapeHtml(produtosFiltro.dataInicial)}" /></label>
@@ -458,15 +458,124 @@
       };
       el.querySelector('#limparProdutoFiltro').onclick = () => { produtosFiltro = { busca: '', canal: '', dataInicial: '', dataFinal: '' }; renderProdutos(); };
       el.querySelector('#exportProdutosBtn').onclick = () => exportProdutosCsv(filtered);
+      el.querySelector('#modeloProdutosBtn').onclick = () => exportProdutoModeloCsv();
+      el.querySelector('#importProdutosBtn').onclick = () => el.querySelector('#produtosCsvInput').click();
+      el.querySelector('#produtosCsvInput').onchange = event => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const imported = importProdutosCsv(String(reader.result || ''));
+            event.target.value = '';
+            alert(`${imported} produto(s) importado(s) com sucesso.`);
+          } catch (error) {
+            alert(`Não foi possível importar a planilha: ${error.message}`);
+          }
+        };
+        reader.readAsText(file, 'UTF-8');
+      };
+    }
+
+    function produtoCsvHeader() {
+      return ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Vigência inicial', 'Vigência final', 'Observações'];
+    }
+
+    function exportProdutoModeloCsv() {
+      const header = produtoCsvHeader();
+      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', 'Lote 01', 'Ambos', '10,00', '12,00', '2026-01-01', '2026-12-31', 'Observação opcional'];
+      downloadFile('modelo-produtos-aagrifam.csv', [header.map(csvCell).join(';'), example.map(csvCell).join(';')].join('\n'));
     }
 
     function exportProdutosCsv(produtos) {
-      const header = ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Vigência inicial', 'Vigência final', 'Observações'];
+      const header = produtoCsvHeader();
       const lines = produtos.map(p => [
         p.codigo || '', p.nome || '', byId('grupos', p.grupo_id)?.nome || '', p.unidade || '', p.lote || '', p.canal_venda || 'Ambos',
         String(p.preco_urbana || '').replace('.', ','), String(p.preco_rural || '').replace('.', ','), p.vigencia_inicio || '', p.vigencia_fim || '', p.observacao || ''
       ].map(csvCell).join(';'));
       downloadFile(`produtos-aagrifam-${new Date().toISOString().slice(0,10)}.csv`, [header.map(csvCell).join(';'), ...lines].join('\n'));
+    }
+
+    function normalizeHeader(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [], cell = '', quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (ch === '"' && quoted && next === '"') { cell += '"'; i++; continue; }
+        if (ch === '"') { quoted = !quoted; continue; }
+        if ((ch === ';' || ch === ',') && !quoted) { row.push(cell.trim()); cell = ''; continue; }
+        if ((ch === '\n' || ch === '\r') && !quoted) {
+          if (ch === '\r' && next === '\n') i++;
+          row.push(cell.trim());
+          if (row.some(value => value !== '')) rows.push(row);
+          row = []; cell = '';
+          continue;
+        }
+        cell += ch;
+      }
+      row.push(cell.trim());
+      if (row.some(value => value !== '')) rows.push(row);
+      return rows;
+    }
+
+    function parseMoneyInput(value) {
+      const text = String(value || '').replace(/R\$/g, '').trim();
+      if (!text) return '';
+      const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text;
+      const number = Number(normalized);
+      return Number.isFinite(number) ? String(number) : '';
+    }
+
+    function normalizeCanal(value) {
+      const text = normalizeHeader(value);
+      if (text === 'urbana') return 'Urbana';
+      if (text === 'rural') return 'Rural';
+      return 'Ambos';
+    }
+
+    function findOrCreateGrupo(nome) {
+      const name = String(nome || '').trim();
+      if (!name) return '';
+      let grupo = db.grupos.find(g => normalizeHeader(g.nome) === normalizeHeader(name));
+      if (!grupo) {
+        grupo = { id: id(), nome: name, descricao: 'Criado automaticamente pela importação de produtos.' };
+        db.grupos.push(grupo);
+      }
+      return grupo.id;
+    }
+
+    function importProdutosCsv(text) {
+      const rows = parseCsv(text.replace(/^\uFEFF/, ''));
+      if (rows.length < 2) throw new Error('o arquivo precisa conter cabeçalho e pelo menos uma linha de produto.');
+      const header = rows[0].map(normalizeHeader);
+      const aliases = {
+        codigo: ['codigo', 'cod'], nome: ['produto', 'nome', 'nomeproduto'], grupo: ['grupo', 'categoria'], unidade: ['unidade', 'un'], lote: ['lote'],
+        canal: ['canal', 'canaldevenda'], precoUrbana: ['precourbana', 'precourbano', 'valorurbana', 'valorurbano'], precoRural: ['precorural', 'valorrural'],
+        vigenciaInicio: ['vigenciainicial', 'inicio', 'datainicial'], vigenciaFim: ['vigenciafinal', 'fim', 'datafinal'], observacao: ['observacoes', 'observacao', 'obs']
+      };
+      const findIndex = names => names.map(name => header.indexOf(name)).find(index => index >= 0);
+      const idx = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, findIndex(names)]));
+      if (idx.nome === undefined || idx.nome < 0) throw new Error('não encontrei a coluna Produto ou Nome. Baixe o modelo CSV e mantenha os cabeçalhos.');
+      let imported = 0;
+      rows.slice(1).forEach(row => {
+        const get = index => index >= 0 ? String(row[index] || '').trim() : '';
+        const nome = get(idx.nome);
+        if (!nome) return;
+        db.produtos.push({
+          id: id(), codigo: get(idx.codigo), nome, grupo_id: findOrCreateGrupo(get(idx.grupo)), unidade: get(idx.unidade), lote: get(idx.lote),
+          canal_venda: normalizeCanal(get(idx.canal)), preco_urbana: parseMoneyInput(get(idx.precoUrbana)), preco_rural: parseMoneyInput(get(idx.precoRural)),
+          vigencia_inicio: get(idx.vigenciaInicio), vigencia_fim: get(idx.vigenciaFim), observacao: get(idx.observacao)
+        });
+        imported++;
+      });
+      if (!imported) throw new Error('nenhum produto válido foi encontrado. Confira se a coluna Produto está preenchida.');
+      save();
+      return imported;
     }
 
     function renderRomaneios() {
