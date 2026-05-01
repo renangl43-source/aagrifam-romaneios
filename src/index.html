@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AAGRIFAM Romaneios</title>
+  <meta name="description" content="Sistema estático para controle de cadastros, romaneios e relatórios da AAGRIFAM." />
+  <style>
+    :root {
+      --bg: #f4f7f2;
+      --surface: #ffffff;
+      --surface-2: #eef6ea;
+      --primary: #1f7a3a;
+      --primary-dark: #145327;
+      --accent: #f5a623;
+      --danger: #b42318;
+      --muted: #647067;
+      --text: #1d2b20;
+      --border: #d8e2d5;
+      --shadow: 0 18px 45px rgba(21, 83, 39, 0.11);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top left, rgba(31,122,58,.16), transparent 35%), var(--bg);
+      min-height: 100vh;
+    }
+
+    a { color: inherit; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .login-page {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .login-card {
+      width: min(960px, 100%);
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 48px;
+      background: linear-gradient(145deg, #155e2c, #1f7a3a 52%, #7cae46);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero:after {
+      content: "";
+      position: absolute;
+      width: 340px;
+      height: 340px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.1);
+      right: -120px;
+      bottom: -130px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.16);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .hero h1 { margin: 28px 0 14px; font-size: clamp(34px, 6vw, 58px); line-height: .96; }
+    .hero p { margin: 0; max-width: 560px; color: rgba(255,255,255,.86); font-size: 18px; line-height: 1.55; }
+
+    .login-form { padding: 48px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+    .login-form h2 { margin: 0; font-size: 28px; }
+    .login-form p { margin: 0 0 8px; color: var(--muted); line-height: 1.5; }
+
+    .app { display: none; min-height: 100vh; }
+    .shell { display: grid; grid-template-columns: 286px 1fr; min-height: 100vh; }
+    .sidebar {
+      padding: 24px;
+      background: #103a1d;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+    .logo {
+      width: 46px; height: 46px; border-radius: 14px;
+      background: linear-gradient(135deg, #fff, #e8f6e0);
+      color: var(--primary-dark); display: grid; place-items: center; font-weight: 900;
+    }
+    .brand strong { display: block; font-size: 18px; }
+    .brand span { color: rgba(255,255,255,.72); font-size: 13px; }
+
+    .nav { display: grid; gap: 8px; }
+    .nav button {
+      border: 0;
+      width: 100%;
+      border-radius: 14px;
+      padding: 13px 14px;
+      color: rgba(255,255,255,.83);
+      background: transparent;
+      text-align: left;
+      font-weight: 700;
+    }
+    .nav button.active, .nav button:hover { background: rgba(255,255,255,.12); color: #fff; }
+
+    .sidebar-footer { margin-top: 26px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.16); color: rgba(255,255,255,.68); font-size: 13px; line-height: 1.45; }
+
+    main { padding: 30px; overflow-x: hidden; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 18px;
+      margin-bottom: 24px;
+    }
+    .topbar h1 { margin: 0; font-size: clamp(26px, 3vw, 38px); }
+    .topbar p { margin: 5px 0 0; color: var(--muted); }
+
+    .grid { display: grid; gap: 18px; }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .card {
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .metric strong { font-size: 32px; display: block; margin-top: 10px; }
+    .metric span { color: var(--muted); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 800; }
+    input, select, textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 13px;
+      background: #fff; color: var(--text); outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(31,122,58,.13); }
+    textarea { min-height: 90px; resize: vertical; }
+
+    .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: end; }
+    .form-grid .span-2 { grid-column: span 2; }
+    .form-grid .span-4 { grid-column: span 4; }
+
+    .btn {
+      border: 0; border-radius: 13px; padding: 12px 16px; font-weight: 900;
+      background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:hover { background: var(--primary-dark); }
+    .btn.secondary { background: #eaf3e7; color: var(--primary-dark); }
+    .btn.secondary:hover { background: #dbead6; }
+    .btn.danger { background: #fee4e2; color: var(--danger); }
+    .btn.danger:hover { background: #fecdca; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    tbody tr:hover { background: #fbfdf9; }
+    .table-wrap { overflow-x: auto; }
+
+    .tag { display: inline-flex; padding: 5px 9px; border-radius: 999px; background: var(--surface-2); color: var(--primary-dark); font-weight: 900; font-size: 12px; }
+    .hidden { display: none !important; }
+    .section { display: none; }
+    .section.active { display: grid; gap: 18px; }
+    .muted { color: var(--muted); }
+    .notice { background: #fff7e6; border: 1px solid #ffd894; color: #694500; border-radius: 14px; padding: 14px 16px; line-height: 1.45; }
+
+    @media (max-width: 1020px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .grid.cols-4, .grid.cols-2, .form-grid { grid-template-columns: 1fr; }
+      .form-grid .span-2, .form-grid .span-4 { grid-column: span 1; }
+      .login-card { grid-template-columns: 1fr; }
+      .hero, .login-form, main { padding: 26px; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .sidebar, .topbar, .no-print, .card:not(.printable) { display: none !important; }
+      .shell { display: block; }
+      main { padding: 0; }
+      .printable { border: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="login" class="login-page">
+    <section class="login-card">
+      <div class="hero">
+        <span class="badge">AAGRIFAM · PNAE-PR</span>
+        <h1>Romaneios com mais controle e agilidade.</h1>
+        <p>Protótipo operacional para cadastros, emissão de romaneios, acompanhamento de valores e geração de documentos para entrega.</p>
+      </div>
+      <form id="loginForm" class="login-form">
+        <h2>Acessar sistema</h2>
+        <p>Use as credenciais de demonstração para entrar. Os dados ficam salvos apenas neste navegador.</p>
+        <label>E-mail<input id="email" type="email" value="admin@aagrifam.local" autocomplete="username" /></label>
+        <label>Senha<input id="senha" type="password" value="123456" autocomplete="current-password" /></label>
+        <button class="btn" type="submit">Entrar</button>
+        <div class="notice"><strong>Credenciais:</strong> admin@aagrifam.local / 123456</div>
+      </form>
+    </section>
+  </div>
+
+  <div id="app" class="app">
+    <div class="shell">
+      <aside class="sidebar no-print">
+        <div class="brand"><div class="logo">AG</div><div><strong>AAGRIFAM</strong><span>Romaneios</span></div></div>
+        <nav class="nav" id="nav"></nav>
+        <div class="sidebar-footer">
+          <strong>Protótipo estático</strong><br />Funciona sem servidor, usando armazenamento local do navegador. Para uso definitivo, recomenda-se backend com autenticação e banco de dados.
+        </div>
+      </aside>
+      <main>
+        <header class="topbar no-print">
+          <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Visão geral da operação comercial.</p></div>
+          <div class="actions"><button class="btn secondary" id="seedBtn">Carregar exemplo</button><button class="btn danger" id="logoutBtn">Sair</button></div>
+        </header>
+
+        <section id="dashboard" class="section active">
+          <div class="grid cols-4">
+            <div class="card metric"><span>Produtores</span><strong id="mProdutores">0</strong></div>
+            <div class="card metric"><span>Clientes</span><strong id="mClientes">0</strong></div>
+            <div class="card metric"><span>Produtos</span><strong id="mProdutos">0</strong></div>
+            <div class="card metric"><span>Total em romaneios</span><strong id="mTotal">R$ 0,00</strong></div>
+          </div>
+          <div class="grid cols-2">
+            <div class="card"><h2>Últimos romaneios</h2><div class="table-wrap"><table><thead><tr><th>Número</th><th>Cliente</th><th>Data</th><th>Total</th></tr></thead><tbody id="ultimosRomaneios"></tbody></table></div></div>
+            <div class="card"><h2>Próximos passos</h2><p class="muted">Cadastre produtores, clientes, grupos e produtos. Depois, gere um romaneio com itens e use a impressão do navegador para salvar em PDF.</p><div class="notice">Este modelo foi preparado para publicação gratuita pelo GitHub Pages.</div></div>
+          </div>
+        </section>
+
+        <section id="produtores" class="section"></section>
+        <section id="clientes" class="section"></section>
+        <section id="grupos" class="section"></section>
+        <section id="produtos" class="section"></section>
+        <section id="romaneios" class="section"></section>
+        <section id="relatorios" class="section"></section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'aagrifam_romaneios_v1';
+    const sections = [
+      ['dashboard', 'Dashboard', 'Visão geral da operação comercial.'],
+      ['produtores', 'Produtores', 'Cadastro de produtores rurais.'],
+      ['clientes', 'Clientes', 'Cadastro de instituições compradoras.'],
+      ['grupos', 'Grupos', 'Grupos de alimentos e limites semanais.'],
+      ['produtos', 'Produtos', 'Produtos, unidades e preços.'],
+      ['romaneios', 'Romaneios', 'Emissão e consulta de romaneios.'],
+      ['relatorios', 'Relatórios', 'Resumo financeiro e operacional.']
+    ];
+
+    const defaults = { produtores: [], clientes: [], grupos: [], produtos: [], romaneios: [] };
+    let db = load();
+    let active = 'dashboard';
+
+    function load() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(defaults)); }
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); render(); }
+    function id() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+    function money(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+    function byId(collection, value) { return db[collection].find(item => item.id === value); }
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+    document.getElementById('loginForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value.trim();
+      if (email === 'admin@aagrifam.local' && senha === '123456') {
+        sessionStorage.setItem('aagrifam_auth', '1');
+        boot();
+      } else {
+        alert('Credenciais inválidas. Use admin@aagrifam.local / 123456.');
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      sessionStorage.removeItem('aagrifam_auth');
+      boot();
+    });
+    document.getElementById('seedBtn').addEventListener('click', seed);
+
+    function boot() {
+      const ok = sessionStorage.getItem('aagrifam_auth') === '1';
+      document.getElementById('login').style.display = ok ? 'none' : 'grid';
+      document.getElementById('app').style.display = ok ? 'block' : 'none';
+      if (ok) render();
+    }
+
+    function renderNav() {
+      const nav = document.getElementById('nav');
+      nav.innerHTML = sections.map(([key, label]) => `<button class="${active === key ? 'active' : ''}" data-section="${key}">${label}</button>`).join('');
+      nav.querySelectorAll('button').forEach(btn => btn.onclick = () => { active = btn.dataset.section; render(); });
+    }
+
+    function setSection() {
+      sections.forEach(([key]) => document.getElementById(key).classList.toggle('active', key === active));
+      const current = sections.find(([key]) => key === active);
+      document.getElementById('pageTitle').textContent = current[1];
+      document.getElementById('pageSubtitle').textContent = current[2];
+    }
+
+    function render() {
+      renderNav();
+      setSection();
+      renderDashboard();
+      renderCrud('produtores', 'Produtores', [
+        ['nome', 'Nome', 'text', true], ['documento', 'CPF/CNPJ', 'text'], ['telefone', 'Telefone', 'text'], ['municipio', 'Município', 'text'], ['status', 'Status', 'select:Ativo|Inativo'], ['observacao', 'Observação', 'textarea']
+      ]);
+      renderCrud('clientes', 'Clientes', [
+        ['nome', 'Nome', 'text', true], ['classificacao', 'Classificação', 'text'], ['municipio', 'Município', 'text'], ['nucleo', 'Núcleo', 'text'], ['endereco', 'Endereço', 'text'], ['telefone', 'Telefone', 'text']
+      ]);
+      renderCrud('grupos', 'Grupos', [
+        ['nome', 'Nome do grupo', 'text', true], ['limite_semanal', 'Limite semanal', 'number']
+      ]);
+      renderProdutos();
+      renderRomaneios();
+      renderRelatorios();
+    }
+
+    function renderDashboard() {
+      document.getElementById('mProdutores').textContent = db.produtores.length;
+      document.getElementById('mClientes').textContent = db.clientes.length;
+      document.getElementById('mProdutos').textContent = db.produtos.length;
+      document.getElementById('mTotal').textContent = money(db.romaneios.reduce((sum, r) => sum + Number(r.valor_total || 0), 0));
+      document.getElementById('ultimosRomaneios').innerHTML = db.romaneios.slice(-6).reverse().map(r => `<tr><td><strong>${escapeHtml(r.numero)}</strong></td><td>${escapeHtml(byId('clientes', r.cliente_id)?.nome || '-')}</td><td>${escapeHtml(r.data)}</td><td>${money(r.valor_total)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nenhum romaneio cadastrado.</td></tr>';
+    }
+
+    function inputField(name, label, type, value = '') {
+      if (type.startsWith('select:')) {
+        const opts = type.replace('select:', '').split('|');
+        return `<label>${label}<select name="${name}">${opts.map(o => `<option ${value === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+      }
+      if (type === 'textarea') return `<label class="span-4">${label}<textarea name="${name}">${escapeHtml(value)}</textarea></label>`;
+      return `<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(value)}" ${type === 'number' ? 'step="0.01"' : ''}/></label>`;
+    }
+
+    function renderCrud(key, title, fields) {
+      const el = document.getElementById(key);
+      el.innerHTML = `<div class="card no-print"><h2>Novo cadastro</h2><form class="form-grid" data-form="${key}">${fields.map(f => inputField(f[0], f[1], f[2])).join('')}<div class="actions"><button class="btn" type="submit">Salvar</button></div></form></div><div class="card"><h2>${title} cadastrados</h2><div class="table-wrap"><table><thead><tr>${fields.slice(0,5).map(f => `<th>${f[1]}</th>`).join('')}<th class="no-print">Ações</th></tr></thead><tbody>${db[key].map(item => `<tr>${fields.slice(0,5).map(f => `<td>${escapeHtml(item[f[0]] || '-')}</td>`).join('')}<td class="no-print"><button class="btn danger" onclick="removeItem('${key}','${item.id}')">Excluir</button></td></tr>`).join('') || `<tr><td colspan="${fields.length + 1}" class="muted">Nenhum registro encontrado.</td></tr>`}</tbody></table></div></div>`;
+      el.querySelector('form').onsubmit = event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.target).entries());
+        if (fields.some(f => f[3] && !data[f[0]])) return alert('Preencha os campos obrigatórios.');
+        db[key].push({ id: id(), ...data });
+        event.target.reset();
+        save();
+      };
+    }
+
+    function renderProdutos() {
+      const el = document.getElementById('produtos');
+      el.innerHTML = `<div class="card no-print"><h2>Novo produto</h2><form class="form-grid" id="produtoForm">
+        <label>Nome<input name="nome" required /></label>
+        <label>Grupo<select name="grupo_id"><option value="">Selecione</option>${db.grupos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('')}</select></label>
+        <label>Unidade<input name="unidade" placeholder="kg, un, pct" /></label>
+        <label>Lote<input name="lote" /></label>
+        <label>Preço urbana<input name="preco_urbana" type="number" step="0.01" /></label>
+        <label>Preço rural<input name="preco_rural" type="number" step="0.01" /></label>
+        <div class="actions"><button class="btn" type="submit">Salvar</button></div>
+      </form></div><div class="card"><h2>Produtos cadastrados</h2><div class="table-wrap"><table><thead><tr><th>Produto</th><th>Grupo</th><th>Unidade</th><th>Preço urbana</th><th>Preço rural</th><th class="no-print">Ações</th></tr></thead><tbody>${db.produtos.map(p => `<tr><td><strong>${escapeHtml(p.nome)}</strong></td><td>${escapeHtml(byId('grupos', p.grupo_id)?.nome || '-')}</td><td>${escapeHtml(p.unidade || '-')}</td><td>${money(p.preco_urbana)}</td><td>${money(p.preco_rural)}</td><td class="no-print"><button class="btn danger" onclick="removeItem('produtos','${p.id}')">Excluir</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nenhum produto cadastrado.</td></tr>'}</tbody></table></div></div>`;
+      el.querySelector('#produtoForm').onsubmit = event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.target).entries());
+        if (!data.nome) return alert('Informe o nome do produto.');
+        db.produtos.push({ id: id(), ...data });
+        event.target.reset();
+        save();
+      };
+    }
+
+    function renderRomaneios() {
+      const el = document.getElementById('romaneios');
+      el.innerHTML = `<div class="card no-print"><h2>Novo romaneio</h2><form class="form-grid" id="romaneioForm">
+        <label>Número<input name="numero" value="${String(db.romaneios.length + 1).padStart(4, '0')}" required /></label>
+        <label>Data<input name="data" type="date" value="${new Date().toISOString().slice(0,10)}" required /></label>
+        <label>Produtor<select name="produtor_id" required><option value="">Selecione</option>${db.produtores.map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('')}</select></label>
+        <label>Cliente<select name="cliente_id" required><option value="">Selecione</option>${db.clientes.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}</select></label>
+        <label>Status<select name="status"><option>Emitido</option><option>Entregue</option><option>Cancelado</option></select></label>
+        <label class="span-4">Itens do romaneio<textarea name="itens_texto" placeholder="Digite um item por linha: Produto | Quantidade | Valor unitário\nExemplo: Alface | 10 | 3.50" required></textarea></label>
+        <div class="actions"><button class="btn" type="submit">Gerar romaneio</button></div>
+      </form></div>
+      <div class="card printable"><h2>Romaneios emitidos</h2><div class="table-wrap"><table><thead><tr><th>Número</th><th>Data</th><th>Produtor</th><th>Cliente</th><th>Status</th><th>Total</th><th class="no-print">Ações</th></tr></thead><tbody>${db.romaneios.map(r => `<tr><td><strong>${escapeHtml(r.numero)}</strong></td><td>${escapeHtml(r.data)}</td><td>${escapeHtml(byId('produtores', r.produtor_id)?.nome || '-')}</td><td>${escapeHtml(byId('clientes', r.cliente_id)?.nome || '-')}</td><td><span class="tag">${escapeHtml(r.status)}</span></td><td>${money(r.valor_total)}</td><td class="no-print"><button class="btn secondary" onclick="printRomaneio('${r.id}')">Imprimir</button> <button class="btn danger" onclick="removeItem('romaneios','${r.id}')">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum romaneio emitido.</td></tr>'}</tbody></table></div><div id="printArea"></div></div>`;
+      el.querySelector('#romaneioForm').onsubmit = event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.target).entries());
+        const itens = data.itens_texto.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+          const [produto, qtd, valor] = line.split('|').map(v => (v || '').trim());
+          return { produto, quantidade: Number(String(qtd).replace(',', '.')) || 0, valor_unitario: Number(String(valor).replace(',', '.')) || 0 };
+        });
+        const total = itens.reduce((sum, item) => sum + item.quantidade * item.valor_unitario, 0);
+        db.romaneios.push({ id: id(), ...data, itens, valor_total: total });
+        event.target.reset();
+        save();
+      };
+    }
+
+    function renderRelatorios() {
+      const total = db.romaneios.reduce((sum, r) => sum + Number(r.valor_total || 0), 0);
+      const porCliente = db.clientes.map(c => ({ nome: c.nome, total: db.romaneios.filter(r => r.cliente_id === c.id).reduce((s, r) => s + Number(r.valor_total || 0), 0) })).filter(x => x.total > 0);
+      document.getElementById('relatorios').innerHTML = `<div class="grid cols-2"><div class="card metric"><span>Romaneios emitidos</span><strong>${db.romaneios.length}</strong></div><div class="card metric"><span>Valor total</span><strong>${money(total)}</strong></div></div><div class="card"><h2>Total por cliente</h2><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Total</th></tr></thead><tbody>${porCliente.map(x => `<tr><td>${escapeHtml(x.nome)}</td><td>${money(x.total)}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">Sem dados para relatório.</td></tr>'}</tbody></table></div></div>`;
+    }
+
+    window.removeItem = function(collection, itemId) {
+      if (!confirm('Deseja realmente excluir este registro?')) return;
+      db[collection] = db[collection].filter(item => item.id !== itemId);
+      save();
+    };
+
+    window.printRomaneio = function(itemId) {
+      const r = byId('romaneios', itemId);
+      if (!r) return;
+      const produtor = byId('produtores', r.produtor_id)?.nome || '-';
+      const cliente = byId('clientes', r.cliente_id)?.nome || '-';
+      const area = document.getElementById('printArea');
+      area.innerHTML = `<hr><h2>Romaneio nº ${escapeHtml(r.numero)}</h2><p><strong>Data:</strong> ${escapeHtml(r.data)} · <strong>Status:</strong> ${escapeHtml(r.status)}</p><p><strong>Produtor:</strong> ${escapeHtml(produtor)}<br><strong>Cliente:</strong> ${escapeHtml(cliente)}</p><table><thead><tr><th>Produto</th><th>Quantidade</th><th>Valor unitário</th><th>Total</th></tr></thead><tbody>${r.itens.map(i => `<tr><td>${escapeHtml(i.produto)}</td><td>${i.quantidade}</td><td>${money(i.valor_unitario)}</td><td>${money(i.quantidade * i.valor_unitario)}</td></tr>`).join('')}</tbody><tfoot><tr><th colspan="3">Total geral</th><th>${money(r.valor_total)}</th></tr></tfoot></table><br><br><p>Assinatura do responsável: ________________________________________</p>`;
+      setTimeout(() => window.print(), 100);
+    };
+
+    function seed() {
+      if (!confirm('Carregar dados de exemplo? Os dados atuais serão mantidos.')) return;
+      const grupo1 = { id: id(), nome: 'Hortaliças', limite_semanal: 500 };
+      const grupo2 = { id: id(), nome: 'Frutas', limite_semanal: 420 };
+      const produtor = { id: id(), nome: 'Produtor Exemplo', documento: '000.000.000-00', telefone: '(44) 99999-0000', municipio: 'Colorado/PR', status: 'Ativo', observacao: 'Cadastro de demonstração' };
+      const cliente = { id: id(), nome: 'Escola Municipal Exemplo', classificacao: 'Instituição', municipio: 'Colorado/PR', nucleo: 'NRE', endereco: 'Endereço de demonstração', telefone: '(44) 3333-0000' };
+      db.grupos.push(grupo1, grupo2);
+      db.produtores.push(produtor);
+      db.clientes.push(cliente);
+      db.produtos.push({ id: id(), nome: 'Alface', grupo_id: grupo1.id, unidade: 'un', lote: 'A1', preco_urbana: 3.5, preco_rural: 3.3 }, { id: id(), nome: 'Banana', grupo_id: grupo2.id, unidade: 'kg', lote: 'B1', preco_urbana: 5.2, preco_rural: 5.0 });
+      db.romaneios.push({ id: id(), numero: '0001', data: new Date().toISOString().slice(0,10), produtor_id: produtor.id, cliente_id: cliente.id, status: 'Emitido', itens: [{ produto: 'Alface', quantidade: 20, valor_unitario: 3.5 }, { produto: 'Banana', quantidade: 30, valor_unitario: 5.2 }], valor_total: 226 });
+      save();
+    }
+
+    boot();
+  </script>
+</body>
+</html>

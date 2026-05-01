@@ -30,7 +30,7 @@ Sistema web para emissão de **romaneios (guias de entrega)** da AAGRIFAM — As
 ### Opção 1 — Abrir direto no navegador (mais simples)
 
 ```bash
-git clone https://github.com/SEU-USUARIO/aagrifam-romaneios.git
+git clone https://github.com/renangl43-source/aagrifam-romaneios.git
 cd aagrifam-romaneios
 ```
 
@@ -91,13 +91,14 @@ aagrifam-romaneios/
 
 ## 🌐 Publicar como site no GitHub Pages (grátis)
 
-1. No GitHub, vá em **Settings → Pages**
-2. Em *Source*, selecione **Deploy from a branch**
-3. Branch: `main`, pasta: `/src` (ou `/root` se preferir)
-4. Clique em **Save**
-5. Em alguns minutos seu protótipo estará em: `https://SEU-USUARIO.github.io/aagrifam-romaneios/`
+Este repositório está configurado com deploy automático por **GitHub Actions**. A cada push na branch `main`, o conteúdo da pasta `src` é enviado para o GitHub Pages.
 
-> Há também um workflow pronto em `.github/workflows/deploy-pages.yml` que faz deploy automático a cada push na `main`.
+1. No GitHub, vá em **Settings → Pages**
+2. Em **Build and deployment**, selecione **GitHub Actions** como fonte de publicação
+3. Volte na aba **Actions** e aguarde o workflow **Publicar no GitHub Pages** concluir
+4. Em alguns minutos o protótipo estará em: `https://renangl43-source.github.io/aagrifam-romaneios/`
+
+> O workflow ativo está em `.github/workflows/deploy-pages.yml` e publica automaticamente o arquivo `src/index.html`.
 
 ---
 
