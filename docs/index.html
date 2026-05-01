@@ -421,7 +421,7 @@
         <td>${escapeHtml(p.observacao || '-')}</td>
         <td class="no-print"><button class="btn danger" onclick="removeItem('produtos','${p.id}')">Excluir</button></td>
       </tr>`).join('') || '<tr><td colspan="12" class="muted">Nenhum produto encontrado para os filtros selecionados.</td></tr>';
-      el.innerHTML = `<div class="card no-print"><h2>Novo produto</h2><p class="sheet-note">Cadastre cada item com dados completos para formar uma planilha de produtos, preços, canal de venda e período de vigência.</p><form class="form-grid" id="produtoForm">
+      el.innerHTML = `<div class="card no-print"><div class="sheet-toolbar"><div><h2>Novo produto</h2><p class="sheet-note">Cadastre manualmente ou use o botão destacado para importar sua planilha CSV de produtos.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtnTop" type="button">Baixar modelo CSV</button><button class="btn" id="importProdutosBtnTop" type="button">Importar CSV</button></div></div><form class="form-grid" id="produtoForm">
         <label>Código<input name="codigo" placeholder="Ex.: 001" /></label>
         <label>Produto<input name="nome" required placeholder="Nome do produto" /></label>
         <label>Grupo<select name="grupo_id"><option value="">Selecione</option>${db.grupos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('')}</select></label>
@@ -459,7 +459,9 @@
       el.querySelector('#limparProdutoFiltro').onclick = () => { produtosFiltro = { busca: '', canal: '', dataInicial: '', dataFinal: '' }; renderProdutos(); };
       el.querySelector('#exportProdutosBtn').onclick = () => exportProdutosCsv(filtered);
       el.querySelector('#modeloProdutosBtn').onclick = () => exportProdutoModeloCsv();
+      el.querySelector('#modeloProdutosBtnTop').onclick = () => exportProdutoModeloCsv();
       el.querySelector('#importProdutosBtn').onclick = () => el.querySelector('#produtosCsvInput').click();
+      el.querySelector('#importProdutosBtnTop').onclick = () => el.querySelector('#produtosCsvInput').click();
       el.querySelector('#produtosCsvInput').onchange = event => {
         const file = event.target.files?.[0];
         if (!file) return;
