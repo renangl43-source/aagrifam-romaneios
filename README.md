@@ -81,7 +81,7 @@ aagrifam-romaneios/
 ├── scripts/                    # Scripts utilitários (importação, etc.)
 ├── .github/
 │   └── workflows/
-│       └── deploy-pages.yml    # Deploy automático no GitHub Pages
+│       └── blank.yml           # Workflow padrão criado anteriormente
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -91,14 +91,15 @@ aagrifam-romaneios/
 
 ## 🌐 Publicar como site no GitHub Pages (grátis)
 
-Este repositório está configurado com deploy automático por **GitHub Actions**. A cada push na branch `main`, o conteúdo da pasta `src` é enviado para o GitHub Pages.
+Este repositório já possui uma cópia publicável do sistema em `docs/index.html`, compatível com a publicação direta por branch no GitHub Pages.
 
 1. No GitHub, vá em **Settings → Pages**
-2. Em **Build and deployment**, selecione **GitHub Actions** como fonte de publicação
-3. Volte na aba **Actions** e aguarde o workflow **Publicar no GitHub Pages** concluir
-4. Em alguns minutos o protótipo estará em: `https://renangl43-source.github.io/aagrifam-romaneios/`
+2. Em **Build and deployment**, selecione **Deploy from a branch**
+3. Em **Branch**, selecione `main` e, na pasta, selecione `/docs`
+4. Clique em **Save**
+5. Em alguns minutos o protótipo estará em: `https://renangl43-source.github.io/aagrifam-romaneios/`
 
-> O workflow ativo está em `.github/workflows/deploy-pages.yml` e publica automaticamente o arquivo `src/index.html`.
+> Observação: tentei preparar deploy por GitHub Actions, mas o acesso disponível não permite alterar arquivos de workflow. Por isso, deixei a publicação pronta pela pasta `/docs`, que é o caminho mais simples para ativar manualmente nas configurações do repositório.
 
 ---
 
