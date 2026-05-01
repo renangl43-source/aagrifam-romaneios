@@ -462,25 +462,35 @@
       el.querySelector('#modeloProdutosBtnTop').onclick = () => exportProdutoModeloCsv();
       el.querySelector('#importProdutosBtn').onclick = () => el.querySelector('#produtosCsvInput').click();
       el.querySelector('#importProdutosBtnTop').onclick = () => el.querySelector('#produtosCsvInput').click();
-      el.querySelector('#produtosCsvInput').onchange = event => {
+      el.querySelector('#produtosCsvInput').onchange = async event => {
         const file = event.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const imported = importProdutosCsv(String(reader.result || ''));
-            event.target.value = '';
-            alert(`${imported} produto(s) importado(s) com sucesso.`);
-          } catch (error) {
-            alert(`Não foi possível importar a planilha: ${error.message}`);
-          }
-        };
-        reader.readAsText(file, 'UTF-8');
+        try {
+          const text = decodeCsvText(await file.arrayBuffer());
+          const imported = importProdutosCsv(text);
+          event.target.value = '';
+          alert(`${imported} produto(s) importado(s) com sucesso.`);
+        } catch (error) {
+          alert(`Não foi possível importar a planilha: ${error.message}`);
+        }
       };
     }
 
     function produtoCsvHeader() {
       return ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Vigência inicial', 'Vigência final', 'Observações'];
+    }
+
+    function decodeCsvText(buffer) {
+      const bytes = new Uint8Array(buffer);
+      const hasUtf8Bom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+      if (hasUtf8Bom) return new TextDecoder('utf-8').decode(bytes.slice(3));
+      try {
+        const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        if (!utf8.includes('�')) return utf8;
+      } catch (error) {
+        // Quando o CSV vem do Excel em ANSI/Windows-1252, a leitura UTF-8 falha aqui.
+      }
+      return new TextDecoder('windows-1252').decode(bytes);
     }
 
     function exportProdutoModeloCsv() {
