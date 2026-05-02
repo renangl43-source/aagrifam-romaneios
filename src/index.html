@@ -490,7 +490,7 @@
       const canais = ['Urbana', 'Rural', 'Ambos'];
       const filtered = db.produtos.filter(p => {
         const grupo = byId('grupos', p.grupo_id)?.nome || '';
-        const texto = `${p.codigo || ''} ${p.nome || ''} ${grupo} ${p.unidade || ''} ${p.lote || ''} ${p.observacao || ''}`.toLowerCase();
+        const texto = `${p.codigo || ''} ${p.nome || ''} ${grupo} ${p.unidade || ''} ${p.lote || ''}`.toLowerCase();
         const buscaOk = !produtosFiltro.busca || texto.includes(produtosFiltro.busca.toLowerCase());
         const canalOk = !produtosFiltro.canal || (p.canal_venda || 'Ambos') === produtosFiltro.canal;
         return buscaOk && canalOk;
@@ -504,9 +504,8 @@
         <td>${escapeHtml(p.canal_venda || 'Ambos')}</td>
         <td>${money(p.preco_urbana)}</td>
         <td>${money(p.preco_rural)}</td>
-        <td>${escapeHtml(p.observacao || '-')}</td>
         <td class="no-print"><button class="btn danger" onclick="removeItem('produtos','${p.id}')">Excluir</button></td>
-      </tr>`).join('') || '<tr><td colspan="10" class="muted">Nenhum produto encontrado para os filtros selecionados.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="9" class="muted">Nenhum produto encontrado para os filtros selecionados.</td></tr>';
       el.innerHTML = `<div class="card no-print"><div class="sheet-toolbar"><div><h2>Novo produto</h2><p class="sheet-note">Cadastre manualmente ou use o botão destacado para importar sua planilha CSV de produtos.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtnTop" type="button">Baixar modelo CSV</button><button class="btn" id="importProdutosBtnTop" type="button">Importar CSV</button></div></div><form class="form-grid" id="produtoForm">
         <label>Código<input name="codigo" placeholder="Ex.: 001" /></label>
         <label>Produto<input name="nome" required placeholder="Nome do produto" /></label>
@@ -516,7 +515,6 @@
         <label>Canal de venda<select name="canal_venda">${canais.map(c => `<option>${c}</option>`).join('')}</select></label>
         <label>Preço urbana<input name="preco_urbana" type="number" step="0.01" /></label>
         <label>Preço rural<input name="preco_rural" type="number" step="0.01" /></label>
-        <label class="span-2">Observações<input name="observacao" placeholder="Ex.: sazonalidade, padrão, restrição ou entrega" /></label>
         <div class="actions"><button class="btn" type="submit">Adicionar à planilha</button></div>
       </form></div>
       <div class="card no-print"><div class="sheet-toolbar"><div><h2>Filtros e importação da planilha</h2><p class="sheet-note">Use busca e canal de venda para localizar produtos. Para upload, use CSV com cabeçalhos iguais ao modelo.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtn" type="button">Baixar modelo CSV</button><button class="btn secondary" id="importProdutosBtn" type="button">Importar CSV</button><button class="btn secondary" id="exportProdutosBtn" type="button">Baixar CSV</button><input id="produtosCsvInput" type="file" accept=".csv,text/csv" hidden /></div></div><form class="form-grid" id="produtoFiltroForm">
@@ -524,7 +522,7 @@
         <label>Canal<select name="canal"><option value="">Todos</option>${canais.map(c => `<option value="${c}" ${produtosFiltro.canal === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
         <div class="actions"><button class="btn" type="submit">Aplicar filtros</button><button class="btn secondary" id="limparProdutoFiltro" type="button">Limpar</button></div>
       </form></div>
-      <div class="card"><div class="sheet-toolbar"><div><h2>Planilha de produtos</h2><p class="sheet-note">${filtered.length} de ${db.produtos.length} produto(s) exibido(s).</p></div></div><div class="table-wrap"><table class="sheet-table"><thead><tr><th>Código</th><th>Produto</th><th>Grupo</th><th>Unidade</th><th>Lote</th><th>Canal</th><th>Preço urbana</th><th>Preço rural</th><th>Observações</th><th class="no-print">Ações</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+      <div class="card"><div class="sheet-toolbar"><div><h2>Planilha de produtos</h2><p class="sheet-note">${filtered.length} de ${db.produtos.length} produto(s) exibido(s).</p></div></div><div class="table-wrap"><table class="sheet-table"><thead><tr><th>Código</th><th>Produto</th><th>Grupo</th><th>Unidade</th><th>Lote</th><th>Canal</th><th>Preço urbana</th><th>Preço rural</th><th class="no-print">Ações</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
       el.querySelector('#produtoForm').onsubmit = event => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.target).entries());
@@ -559,7 +557,7 @@
     }
 
     function produtoCsvHeader() {
-      return ['Codigo', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preco urbana', 'Preco rural', 'Observacoes'];
+      return ['Codigo', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preco urbana', 'Preco rural'];
     }
 
     function decodeCsvText(buffer) {
@@ -577,7 +575,7 @@
 
     function exportProdutoModeloCsv() {
       const header = produtoCsvHeader();
-      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', gerarLoteAtual(), 'Ambos', '10,00', '12,00', 'Observacao opcional'];
+      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', gerarLoteAtual(), 'Ambos', '10,00', '12,00'];
       downloadFile('modelo-produtos-aagrifam.csv', [header.map(csvCell).join(';'), example.map(csvCell).join(';')].join('\n'));
     }
 
@@ -585,7 +583,7 @@
       const header = produtoCsvHeader();
       const lines = produtos.map(p => [
         p.codigo || '', p.nome || '', byId('grupos', p.grupo_id)?.nome || '', p.unidade || '', p.lote || '', p.canal_venda || 'Ambos',
-        String(p.preco_urbana || '').replace('.', ','), String(p.preco_rural || '').replace('.', ','), p.observacao || ''
+        String(p.preco_urbana || '').replace('.', ','), String(p.preco_rural || '').replace('.', ',')
       ].map(csvCell).join(';'));
       downloadFile(`produtos-aagrifam-${new Date().toISOString().slice(0,10)}.csv`, [header.map(csvCell).join(';'), ...lines].join('\n'));
     }
@@ -649,8 +647,7 @@
       const header = rows[0].map(normalizeHeader);
       const aliases = {
         codigo: ['codigo', 'cod'], nome: ['produto', 'nome', 'nomeproduto'], grupo: ['grupo', 'categoria'], unidade: ['unidade', 'un'], lote: ['lote'],
-        canal: ['canal', 'canaldevenda'], precoUrbana: ['precourbana', 'precourbano', 'valorurbana', 'valorurbano'], precoRural: ['precorural', 'valorrural'],
-        observacao: ['observacoes', 'observacao', 'obs']
+        canal: ['canal', 'canaldevenda'], precoUrbana: ['precourbana', 'precourbano', 'valorurbana', 'valorurbano'], precoRural: ['precorural', 'valorrural']
       };
       const findIndex = names => names.map(name => header.indexOf(name)).find(index => index >= 0);
       const idx = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, findIndex(names)]));
@@ -662,8 +659,7 @@
         if (!nome) return;
         db.produtos.push({
           id: id(), codigo: get(idx.codigo), nome, grupo_id: findOrCreateGrupo(get(idx.grupo)), unidade: get(idx.unidade), lote: get(idx.lote) || gerarLoteAtual(),
-          canal_venda: normalizeCanal(get(idx.canal)), preco_urbana: parseMoneyInput(get(idx.precoUrbana)), preco_rural: parseMoneyInput(get(idx.precoRural)),
-          observacao: get(idx.observacao)
+          canal_venda: normalizeCanal(get(idx.canal)), preco_urbana: parseMoneyInput(get(idx.precoUrbana)), preco_rural: parseMoneyInput(get(idx.precoRural))
         });
         imported++;
       });
