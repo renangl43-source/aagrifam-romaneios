@@ -169,6 +169,21 @@
     .btn.danger { background: #fee4e2; color: var(--danger); }
     .btn.danger:hover { background: #fecdca; }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .smart-items {
+      grid-column: span 4;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fbfdf9, #ffffff);
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+    .smart-items-header { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .smart-items-header h3 { margin: 0 0 5px; font-size: 18px; color: var(--text); }
+    .smart-items-header p, .smart-hint { margin: 0; color: var(--muted); line-height: 1.45; font-size: 13px; }
+    .smart-item-builder { display: grid; grid-template-columns: 2fr .8fr .9fr auto; gap: 12px; align-items: end; }
+    .smart-product-card { border: 1px dashed var(--border); border-radius: 14px; padding: 12px; background: var(--surface-2); color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .smart-total { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: #eaf3e7; color: var(--primary-dark); font-weight: 900; }
 
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
@@ -235,8 +250,8 @@
     @media (max-width: 1020px) {
       .shell { grid-template-columns: 1fr; }
       .sidebar { position: relative; height: auto; }
-      .grid.cols-4, .grid.cols-2, .form-grid { grid-template-columns: 1fr; }
-      .form-grid .span-2, .form-grid .span-4 { grid-column: span 1; }
+      .grid.cols-4, .grid.cols-2, .form-grid, .smart-item-builder { grid-template-columns: 1fr; }
+      .form-grid .span-2, .form-grid .span-4, .smart-items { grid-column: span 1; }
       .login-card { grid-template-columns: 1fr; }
       .hero, .login-form, main { padding: 26px; }
     }
@@ -337,6 +352,7 @@
     let active = 'dashboard';
     let produtosFiltro = { busca: '', canal: '' };
     let relatoriosFiltro = { inicio: '', fim: '', cliente_id: '', produtor_id: '' };
+    let romaneioItensTemp = [];
 
     function load() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(defaults)); }
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); render(); }
@@ -697,6 +713,97 @@
       return imported;
     }
 
+    function produtoOpcaoTexto(produto) {
+      return `${produto.codigo ? produto.codigo + ' - ' : ''}${produto.nome || ''}${produto.unidade ? ' (' + produto.unidade + ')' : ''}`.trim();
+    }
+
+    function produtoPorEntradaRomaneio(value) {
+      const termo = normalizeHeader(value);
+      if (!termo) return null;
+      return db.produtos.find(p => normalizeHeader(produtoOpcaoTexto(p)) === termo || normalizeHeader(p.nome) === termo || normalizeHeader(p.codigo) === termo)
+        || db.produtos.find(p => normalizeHeader(produtoOpcaoTexto(p)).includes(termo) || normalizeHeader(p.nome).includes(termo) || normalizeHeader(p.codigo).includes(termo))
+        || null;
+    }
+
+    function itemRomaneioFromProduto(produto, quantidade, cliente, valorManual) {
+      const precoAutomatico = precoProdutoParaCliente(produto, cliente);
+      const valorUnitario = parseMoneyInput(valorManual || precoAutomatico);
+      return {
+        produto: produto.nome || '',
+        produto_id: produto.id || '',
+        grupo_id: produto.grupo_id || '',
+        tipo_produto: 'CONVENCIONAL',
+        lote: produto.lote || gerarLoteAtual(),
+        unidade: produto.unidade || '',
+        quantidade: Number(String(quantidade).replace(',', '.')) || 0,
+        valor_unitario: Number(valorUnitario) || 0
+      };
+    }
+
+    function atualizarInfoProdutoRomaneio(form) {
+      const produto = produtoPorEntradaRomaneio(form.querySelector('#romaneioProdutoBusca').value);
+      const cliente = byId('clientes', form.elements.cliente_id.value) || {};
+      const valorInput = form.querySelector('#romaneioValorItem');
+      const info = form.querySelector('#romaneioProdutoInfo');
+      if (!produto) {
+        valorInput.value = '';
+        info.innerHTML = 'Digite um produto cadastrado para visualizar preço, unidade, lote e grupo antes de adicionar.';
+        return;
+      }
+      const preco = precoProdutoParaCliente(produto, cliente);
+      valorInput.value = preco !== '' ? Number(preco || 0).toFixed(2) : '';
+      const grupo = byId('grupos', produto.grupo_id)?.nome || '-';
+      info.innerHTML = `<strong>${escapeHtml(produto.nome)}</strong> · Grupo: ${escapeHtml(grupo)} · Unidade: ${escapeHtml(produto.unidade || '-')} · Lote: ${escapeHtml(produto.lote || '-')} · Preço ${escapeHtml(cliente.classificacao || 'Urbana')}: <strong>${money(preco)}</strong>`;
+    }
+
+    function renderItensRomaneioAssistido(form) {
+      const tbody = form.querySelector('#romaneioItensPreview');
+      const hidden = form.querySelector('#romaneioItensJson');
+      const totalEl = form.querySelector('#romaneioItensTotal');
+      const total = romaneioItensTemp.reduce((sum, item) => sum + Number(item.quantidade || 0) * Number(item.valor_unitario || 0), 0);
+      hidden.value = JSON.stringify(romaneioItensTemp);
+      totalEl.textContent = money(total);
+      tbody.innerHTML = romaneioItensTemp.map((item, index) => `<tr><td><strong>${escapeHtml(item.produto)}</strong></td><td>${escapeHtml(item.unidade || '-')}</td><td>${escapeHtml(item.lote || '-')}</td><td>${Number(item.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td><td>${money(item.valor_unitario)}</td><td>${money(Number(item.quantidade || 0) * Number(item.valor_unitario || 0))}</td><td class="no-print"><button class="btn danger" type="button" onclick="removerItemRomaneioAssistido(${index})">Remover</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum item adicionado ao romaneio.</td></tr>';
+    }
+
+    function configurarItensRomaneioAssistido(form) {
+      romaneioItensTemp = [];
+      const produtoInput = form.querySelector('#romaneioProdutoBusca');
+      const quantidadeInput = form.querySelector('#romaneioQuantidadeItem');
+      const valorInput = form.querySelector('#romaneioValorItem');
+      const addBtn = form.querySelector('#adicionarItemRomaneio');
+      const refresh = () => atualizarInfoProdutoRomaneio(form);
+      produtoInput.addEventListener('input', refresh);
+      form.elements.cliente_id.addEventListener('change', refresh);
+      addBtn.addEventListener('click', () => {
+        const produto = produtoPorEntradaRomaneio(produtoInput.value);
+        const cliente = byId('clientes', form.elements.cliente_id.value) || {};
+        const quantidade = Number(String(quantidadeInput.value).replace(',', '.')) || 0;
+        if (!produto) { alert('Selecione um produto cadastrado antes de adicionar o item.'); produtoInput.focus(); return; }
+        if (quantidade <= 0) { alert('Informe uma quantidade maior que zero.'); quantidadeInput.focus(); return; }
+        const item = itemRomaneioFromProduto(produto, quantidade, cliente, valorInput.value);
+        if (item.valor_unitario <= 0 && !confirm('Este item está com preço unitário zerado. Deseja adicionar mesmo assim?')) return;
+        romaneioItensTemp.push(item);
+        produtoInput.value = '';
+        quantidadeInput.value = '';
+        valorInput.value = '';
+        atualizarInfoProdutoRomaneio(form);
+        renderItensRomaneioAssistido(form);
+        produtoInput.focus();
+      });
+      [produtoInput, quantidadeInput, valorInput].forEach(input => input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); addBtn.click(); }
+      }));
+      renderItensRomaneioAssistido(form);
+      refresh();
+    }
+
+    window.removerItemRomaneioAssistido = function(index) {
+      romaneioItensTemp.splice(index, 1);
+      const form = document.getElementById('romaneioForm');
+      if (form) renderItensRomaneioAssistido(form);
+    };
+
     function renderRomaneios() {
       const el = document.getElementById('romaneios');
       const hoje = new Date();
@@ -716,35 +823,44 @@
         <label>Horário de atendimento<input name="horario_atendimento" value="08h:00 às 12:00 e das 13:00 às 17:00" /></label>
         <label>Data de recebimento<input name="data_recebimento" type="date" value="${hoje.toISOString().slice(0,10)}" /></label>
         <label>Observação<input name="observacao" placeholder="Observação do cabeçalho, se houver" /></label>
-        <label class="span-4">Itens do romaneio<textarea name="itens_texto" placeholder="Digite um item por linha: Produto | Quantidade
-Exemplo: Alface | 10
-O preço será preenchido automaticamente conforme a classificação Rural/Urbana do cliente." required></textarea></label>
+        <div class="smart-items">
+          <input type="hidden" name="itens_json" id="romaneioItensJson" />
+          <div class="smart-items-header">
+            <div>
+              <h3>Itens do romaneio</h3>
+              <p>Pesquise o produto cadastrado, informe a quantidade e adicione à guia. O sistema busca unidade, lote, grupo e preço conforme a classificação Rural/Urbana do cliente.</p>
+            </div>
+            <div class="smart-total">Total prévio: <span id="romaneioItensTotal">R$ 0,00</span></div>
+          </div>
+          <div class="smart-item-builder">
+            <label>Produto<input id="romaneioProdutoBusca" list="romaneioProdutosList" placeholder="Digite código ou nome do produto" autocomplete="off" /></label>
+            <label>Quantidade<input id="romaneioQuantidadeItem" type="number" step="0.001" min="0" placeholder="0" /></label>
+            <label>Preço unitário<input id="romaneioValorItem" type="number" step="0.01" min="0" placeholder="Automático" /></label>
+            <div class="actions"><button class="btn secondary" id="adicionarItemRomaneio" type="button">Adicionar item</button></div>
+          </div>
+          <datalist id="romaneioProdutosList">${db.produtos.map(p => `<option value="${escapeHtml(produtoOpcaoTexto(p))}"></option>`).join('')}</datalist>
+          <div class="smart-product-card" id="romaneioProdutoInfo">Selecione um cliente e digite um produto cadastrado para visualizar preço, unidade e lote antes de adicionar.</div>
+          <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Unid.</th><th>Lote</th><th>Qtd.</th><th>Valor unit.</th><th>Total</th><th class="no-print">Ações</th></tr></thead><tbody id="romaneioItensPreview"><tr><td colspan="7" class="muted">Nenhum item adicionado ao romaneio.</td></tr></tbody></table></div>
+          <p class="smart-hint">Dica: se o produto ainda não aparecer na busca, cadastre-o primeiro na aba Produtos ou importe a planilha CSV de produtos.</p>
+        </div>
         <div class="actions"><button class="btn" type="submit">Gerar romaneio</button></div>
       </form></div>
       <div class="card printable"><h2>Romaneios emitidos</h2><div class="table-wrap no-print"><table><thead><tr><th>Número</th><th>Data</th><th>Produtor</th><th>Cliente</th><th>Total</th><th class="no-print">Ações</th></tr></thead><tbody>${db.romaneios.map(r => `<tr><td><strong>${escapeHtml(r.numero)}</strong></td><td>${escapeHtml(r.data)}</td><td>${escapeHtml(byId('produtores', r.produtor_id)?.nome || '-')}</td><td>${escapeHtml(byId('clientes', r.cliente_id)?.nome || '-')}</td><td>${money(r.valor_total)}</td><td class="no-print"><button class="btn secondary" onclick="printRomaneio('${r.id}')">Imprimir</button> <button class="btn danger" onclick="removeItem('romaneios','${r.id}')">Excluir</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nenhum romaneio emitido.</td></tr>'}</tbody></table></div><div id="printArea"></div></div>`;
-      el.querySelector('#romaneioForm').onsubmit = event => {
+      const form = el.querySelector('#romaneioForm');
+      configurarItensRomaneioAssistido(form);
+      form.onsubmit = event => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.target).entries());
-        const cliente = byId('clientes', data.cliente_id);
-        const itens = data.itens_texto.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
-          const [produtoDigitado, qtd, valorDigitado] = line.split('|').map(v => (v || '').trim());
-          const produtoCadastrado = produtoPorNome(produtoDigitado);
-          const precoAutomatico = precoProdutoParaCliente(produtoCadastrado, cliente);
-          const valorUnitario = parseMoneyInput(precoAutomatico || valorDigitado);
-          return {
-            produto: produtoCadastrado?.nome || produtoDigitado,
-            produto_id: produtoCadastrado?.id || '',
-            grupo_id: produtoCadastrado?.grupo_id || '',
-            tipo_produto: 'CONVENCIONAL',
-            lote: produtoCadastrado?.lote || gerarLoteAtual(),
-            unidade: produtoCadastrado?.unidade || '',
-            quantidade: Number(String(qtd).replace(',', '.')) || 0,
-            valor_unitario: Number(valorUnitario) || 0
-          };
-        });
+        let itens = [];
+        try { itens = JSON.parse(data.itens_json || '[]'); } catch { itens = []; }
+        if (!itens.length) {
+          alert('Adicione pelo menos um item ao romaneio antes de gerar a guia.');
+          return;
+        }
         const total = itens.reduce((sum, item) => sum + item.quantidade * item.valor_unitario, 0);
-        const { itens_texto, ...romaneio } = data;
+        const { itens_json, ...romaneio } = data;
         db.romaneios.push({ id: id(), ...romaneio, itens, valor_total: total });
+        romaneioItensTemp = [];
         event.target.reset();
         save();
       };
