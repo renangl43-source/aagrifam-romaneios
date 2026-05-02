@@ -336,6 +336,7 @@
     let db = load();
     let active = 'dashboard';
     let produtosFiltro = { busca: '', canal: '' };
+    let relatoriosFiltro = { inicio: '', fim: '', cliente_id: '', produtor_id: '' };
 
     function load() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(defaults)); }
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); render(); }
@@ -749,11 +750,133 @@ O preço será preenchido automaticamente conforme a classificação Rural/Urban
       };
     }
 
-    function renderRelatorios() {
-      const total = db.romaneios.reduce((sum, r) => sum + Number(r.valor_total || 0), 0);
-      const porCliente = db.clientes.map(c => ({ nome: c.nome, total: db.romaneios.filter(r => r.cliente_id === c.id).reduce((s, r) => s + Number(r.valor_total || 0), 0) })).filter(x => x.total > 0);
-      document.getElementById('relatorios').innerHTML = `<div class="grid cols-2"><div class="card metric"><span>Romaneios emitidos</span><strong>${db.romaneios.length}</strong></div><div class="card metric"><span>Valor total</span><strong>${money(total)}</strong></div></div><div class="card"><h2>Total por cliente</h2><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Total</th></tr></thead><tbody>${porCliente.map(x => `<tr><td>${escapeHtml(x.nome)}</td><td>${money(x.total)}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">Sem dados para relatório.</td></tr>'}</tbody></table></div></div>`;
+    function linhasRelatorioRomaneios() {
+      return db.romaneios
+        .filter(r => {
+          const data = r.data || '';
+          const inicioOk = !relatoriosFiltro.inicio || data >= relatoriosFiltro.inicio;
+          const fimOk = !relatoriosFiltro.fim || data <= relatoriosFiltro.fim;
+          const clienteOk = !relatoriosFiltro.cliente_id || r.cliente_id === relatoriosFiltro.cliente_id;
+          const produtorOk = !relatoriosFiltro.produtor_id || r.produtor_id === relatoriosFiltro.produtor_id;
+          return inicioOk && fimOk && clienteOk && produtorOk;
+        })
+        .flatMap(r => {
+          const cliente = byId('clientes', r.cliente_id) || {};
+          const produtor = byId('produtores', r.produtor_id) || {};
+          const itens = Array.isArray(r.itens) ? r.itens : [];
+          if (!itens.length) {
+            return [{
+              data: r.data || '', numero: r.numero || '', cliente_id: r.cliente_id || '', produtor_id: r.produtor_id || '',
+              escola: cliente.nome || 'Cliente não localizado', produtor: produtor.nome || 'Produtor não localizado',
+              produto: '-', unidade: '-', quantidade: 0, valor_unitario: 0, total: Number(r.valor_total || 0)
+            }];
+          }
+          return itens.map(item => {
+            const quantidade = Number(item.quantidade || 0);
+            const valorUnitario = Number(item.valor_unitario || 0);
+            return {
+              data: r.data || '', numero: r.numero || '', cliente_id: r.cliente_id || '', produtor_id: r.produtor_id || '',
+              escola: cliente.nome || 'Cliente não localizado', produtor: produtor.nome || 'Produtor não localizado',
+              produto: item.produto || '-', unidade: item.unidade || '-', quantidade,
+              valor_unitario: valorUnitario, total: quantidade * valorUnitario
+            };
+          });
+        })
+        .sort((a, b) => (a.data || '').localeCompare(b.data || '') || a.escola.localeCompare(b.escola) || a.produtor.localeCompare(b.produtor));
     }
+
+    function resumoRelatorio(linhas, chave) {
+      const mapa = new Map();
+      linhas.forEach(linha => {
+        const nome = linha[chave] || '-';
+        if (!mapa.has(nome)) mapa.set(nome, { nome, quantidade: 0, total: 0, romaneios: new Set() });
+        const item = mapa.get(nome);
+        item.quantidade += Number(linha.quantidade || 0);
+        item.total += Number(linha.total || 0);
+        item.romaneios.add(linha.numero || '-');
+      });
+      return [...mapa.values()].map(item => ({ ...item, romaneios: item.romaneios.size })).sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+    }
+
+    function resumoPorData(linhas) {
+      const mapa = new Map();
+      linhas.forEach(linha => {
+        const data = linha.data || '-';
+        if (!mapa.has(data)) mapa.set(data, { data, quantidade: 0, total: 0, escolas: new Set(), produtores: new Set(), romaneios: new Set() });
+        const item = mapa.get(data);
+        item.quantidade += Number(linha.quantidade || 0);
+        item.total += Number(linha.total || 0);
+        item.escolas.add(linha.escola || '-');
+        item.produtores.add(linha.produtor || '-');
+        item.romaneios.add(linha.numero || '-');
+      });
+      return [...mapa.values()].map(item => ({
+        data: item.data, quantidade: item.quantidade, total: item.total,
+        escolas: item.escolas.size, produtores: item.produtores.size, romaneios: item.romaneios.size
+      })).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    }
+
+    function tabelaResumoRelatorio(rows, tituloColuna) {
+      return rows.map(row => `<tr><td><strong>${escapeHtml(row.nome)}</strong></td><td>${row.romaneios}</td><td>${Number(row.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td><td>${money(row.total)}</td></tr>`).join('') || `<tr><td colspan="4" class="muted">Sem dados para o filtro selecionado.</td></tr>`;
+    }
+
+    function renderRelatorios() {
+      const linhas = linhasRelatorioRomaneios();
+      const total = linhas.reduce((sum, linha) => sum + Number(linha.total || 0), 0);
+      const totalQuantidade = linhas.reduce((sum, linha) => sum + Number(linha.quantidade || 0), 0);
+      const escolasAtendidas = new Set(linhas.map(l => l.escola).filter(Boolean)).size;
+      const produtoresAtivos = new Set(linhas.map(l => l.produtor).filter(Boolean)).size;
+      const romaneiosFiltrados = new Set(linhas.map(l => l.numero).filter(Boolean)).size;
+      const porEscola = resumoRelatorio(linhas, 'escola');
+      const porProdutor = resumoRelatorio(linhas, 'produtor');
+      const porData = resumoPorData(linhas);
+      document.getElementById('relatorios').innerHTML = `<div class="card no-print">
+        <h2>Protótipo de relatórios de entrega</h2>
+        <p class="sheet-note">Use os filtros para conferir entregas por escola, produtor e data. Os valores são calculados a partir dos romaneios já emitidos e dos itens registrados em cada guia.</p>
+        <form class="form-grid" id="relatorioFiltros">
+          <label>Data inicial<input name="inicio" type="date" value="${escapeHtml(relatoriosFiltro.inicio)}" /></label>
+          <label>Data final<input name="fim" type="date" value="${escapeHtml(relatoriosFiltro.fim)}" /></label>
+          <label>Escola / cliente<select name="cliente_id"><option value="">Todas</option>${db.clientes.map(c => `<option value="${c.id}" ${relatoriosFiltro.cliente_id === c.id ? 'selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}</select></label>
+          <label>Produtor<select name="produtor_id"><option value="">Todos</option>${db.produtores.map(p => `<option value="${p.id}" ${relatoriosFiltro.produtor_id === p.id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}</select></label>
+          <div class="actions span-4"><button class="btn" type="submit">Aplicar filtros</button><button class="btn secondary" type="button" onclick="limparFiltrosRelatorio()">Limpar filtros</button><button class="btn secondary" type="button" onclick="exportarRelatorioEntregasCsv()">Exportar CSV</button></div>
+        </form>
+      </div>
+      <div class="grid cols-4">
+        <div class="card metric"><span>Romaneios filtrados</span><strong>${romaneiosFiltrados}</strong></div>
+        <div class="card metric"><span>Escolas atendidas</span><strong>${escolasAtendidas}</strong></div>
+        <div class="card metric"><span>Produtores ativos</span><strong>${produtoresAtivos}</strong></div>
+        <div class="card metric"><span>Valor total</span><strong>${money(total)}</strong></div>
+      </div>
+      <div class="grid cols-2">
+        <div class="card"><h2>Resumo por escola</h2><div class="table-wrap"><table><thead><tr><th>Escola</th><th>Guias</th><th>Quantidade</th><th>Total</th></tr></thead><tbody>${tabelaResumoRelatorio(porEscola, 'Escola')}</tbody></table></div></div>
+        <div class="card"><h2>Resumo por produtor</h2><div class="table-wrap"><table><thead><tr><th>Produtor</th><th>Guias</th><th>Quantidade</th><th>Total</th></tr></thead><tbody>${tabelaResumoRelatorio(porProdutor, 'Produtor')}</tbody></table></div></div>
+      </div>
+      <div class="card"><h2>Resumo por data</h2><div class="table-wrap"><table><thead><tr><th>Data</th><th>Guias</th><th>Escolas</th><th>Produtores</th><th>Quantidade</th><th>Total</th></tr></thead><tbody>${porData.map(row => `<tr><td><strong>${formatDateBR(row.data)}</strong></td><td>${row.romaneios}</td><td>${row.escolas}</td><td>${row.produtores}</td><td>${Number(row.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td><td>${money(row.total)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Sem dados para o filtro selecionado.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="sheet-toolbar"><div><h2>Detalhamento das entregas</h2><p class="sheet-note">Total de quantidade filtrada: ${Number(totalQuantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</p></div></div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Guia</th><th>Escola</th><th>Produtor</th><th>Produto</th><th>Unid.</th><th>Qtd.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>${linhas.map(linha => `<tr><td>${formatDateBR(linha.data)}</td><td><strong>${escapeHtml(linha.numero)}</strong></td><td>${escapeHtml(linha.escola)}</td><td>${escapeHtml(linha.produtor)}</td><td>${escapeHtml(linha.produto)}</td><td>${escapeHtml(linha.unidade)}</td><td>${Number(linha.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td><td>${money(linha.valor_unitario)}</td><td>${money(linha.total)}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">Sem entregas para exibir.</td></tr>'}</tbody></table></div></div>`;
+      document.getElementById('relatorioFiltros').onsubmit = event => {
+        event.preventDefault();
+        relatoriosFiltro = Object.fromEntries(new FormData(event.target).entries());
+        render();
+      };
+    }
+
+    window.limparFiltrosRelatorio = function() {
+      relatoriosFiltro = { inicio: '', fim: '', cliente_id: '', produtor_id: '' };
+      render();
+    };
+
+    window.exportarRelatorioEntregasCsv = function() {
+      const linhas = linhasRelatorioRomaneios();
+      const header = ['Data','Guia','Escola','Produtor','Produto','Unidade','Quantidade','Valor unitario','Total'];
+      const body = linhas.map(linha => [
+        formatDateBR(linha.data), linha.numero, linha.escola, linha.produtor, linha.produto, linha.unidade,
+        Number(linha.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }),
+        Number(linha.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        Number(linha.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ]);
+      const csv = [header, ...body].map(row => row.map(csvCell).join(';')).join('\n');
+      downloadFile('relatorio-entregas-aagrifam.csv', csv);
+    };
 
     window.removeItem = function(collection, itemId) {
       if (!confirm('Deseja realmente excluir este registro?')) return;
