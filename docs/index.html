@@ -367,7 +367,10 @@
       return /[;"\n\r]/.test(text) ? `"${text}"` : text;
     }
     function downloadFile(filename, content, mime = 'text/csv;charset=utf-8') {
-      const blob = new Blob([content], { type: mime });
+      const normalizedContent = String(content ?? '').replace(/\r?\n/g, '\r\n');
+      const hasUtf8Bom = normalizedContent.charCodeAt(0) === 0xFEFF;
+      const finalContent = filename.toLowerCase().endsWith('.csv') && !hasUtf8Bom ? '\ufeff' + normalizedContent : normalizedContent;
+      const blob = new Blob([finalContent], { type: mime });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
