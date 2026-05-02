@@ -559,7 +559,7 @@
     }
 
     function produtoCsvHeader() {
-      return ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Observações'];
+      return ['Codigo', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preco urbana', 'Preco rural', 'Observacoes'];
     }
 
     function decodeCsvText(buffer) {
@@ -577,7 +577,7 @@
 
     function exportProdutoModeloCsv() {
       const header = produtoCsvHeader();
-      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', gerarLoteAtual(), 'Ambos', '10,00', '12,00', 'Observação opcional'];
+      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', gerarLoteAtual(), 'Ambos', '10,00', '12,00', 'Observacao opcional'];
       downloadFile('modelo-produtos-aagrifam.csv', [header.map(csvCell).join(';'), example.map(csvCell).join(';')].join('\n'));
     }
 
