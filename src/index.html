@@ -279,7 +279,7 @@
     const defaults = { produtores: [], clientes: [], grupos: [], produtos: [], romaneios: [] };
     let db = load();
     let active = 'dashboard';
-    let produtosFiltro = { busca: '', canal: '', dataInicial: '', dataFinal: '' };
+    let produtosFiltro = { busca: '', canal: '' };
 
     function load() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(defaults)); }
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); render(); }
@@ -287,13 +287,35 @@
     function money(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
     function byId(collection, value) { return db[collection].find(item => item.id === value); }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
-    function produtoPeriodoOk(produto, dataInicial, dataFinal) {
-      if (!dataInicial && !dataFinal) return true;
-      const inicio = produto.vigencia_inicio || '0000-01-01';
-      const fim = produto.vigencia_fim || '9999-12-31';
-      if (dataInicial && fim < dataInicial) return false;
-      if (dataFinal && inicio > dataFinal) return false;
-      return true;
+    function gerarLoteAtual(date = new Date()) {
+      const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+      const mes = meses[date.getMonth()];
+      const dia = String(date.getDate()).padStart(2, '0');
+      return `${mes}-${dia}`;
+    }
+
+    function produtoPorNome(nome) {
+      const busca = normalizeHeader(nome);
+      if (!busca) return null;
+      return db.produtos.find(p => normalizeHeader(p.nome) === busca || normalizeHeader(p.codigo) === busca) || null;
+    }
+
+    function precoProdutoParaCliente(produto, cliente) {
+      if (!produto) return '';
+      const classificacao = normalizeHeader(cliente?.classificacao || 'Urbana');
+      const preco = classificacao === 'rural' ? produto.preco_rural : produto.preco_urbana;
+      return parseMoneyInput(preco);
+    }
+
+    function totalEntreguePorGrupo(grupoId) {
+      return db.romaneios.reduce((totalGrupo, romaneio) => {
+        return totalGrupo + (romaneio.itens || []).reduce((subtotal, item) => {
+          const produto = byId('produtos', item.produto_id) || produtoPorNome(item.produto);
+          const itemGrupoId = item.grupo_id || produto?.grupo_id || '';
+          if (itemGrupoId !== grupoId) return subtotal;
+          return subtotal + (Number(item.quantidade || 0) * Number(item.valor_unitario || 0));
+        }, 0);
+      }, 0);
     }
     function csvCell(value) {
       const text = String(value ?? '').replace(/"/g, '""');
@@ -357,11 +379,9 @@
         ['nome', 'Nome', 'text', true], ['documento', 'CPF/CNPJ', 'text'], ['telefone', 'Telefone', 'text'], ['municipio', 'Município', 'text'], ['status', 'Status', 'select:Ativo|Inativo'], ['observacao', 'Observação', 'textarea']
       ]);
       renderCrud('clientes', 'Clientes', [
-        ['nome', 'Nome', 'text', true], ['classificacao', 'Classificação', 'text'], ['municipio', 'Município', 'text'], ['nucleo', 'Núcleo', 'text'], ['endereco', 'Endereço', 'text'], ['telefone', 'Telefone', 'text']
+        ['nome', 'Nome', 'text', true], ['classificacao', 'Classificação', 'select:Rural|Urbana'], ['municipio', 'Município', 'text'], ['nucleo', 'Núcleo', 'text'], ['endereco', 'Endereço', 'text'], ['telefone', 'Telefone', 'text']
       ]);
-      renderCrud('grupos', 'Grupos', [
-        ['nome', 'Nome do grupo', 'text', true], ['limite_semanal', 'Limite semanal', 'number']
-      ]);
+      renderGrupos();
       renderProdutos();
       renderRomaneios();
       renderRelatorios();
@@ -397,6 +417,26 @@
       };
     }
 
+    function renderGrupos() {
+      const el = document.getElementById('grupos');
+      const fields = [['nome', 'Nome do grupo', 'text', true], ['limite_semanal', 'Limite semanal', 'number']];
+      const rows = db.grupos.map(grupo => {
+        const limite = Number(grupo.limite_semanal || 0);
+        const totalEntregue = totalEntreguePorGrupo(grupo.id);
+        const saldoDisponivel = limite - totalEntregue;
+        return `<tr><td><strong>${escapeHtml(grupo.nome || '-')}</strong></td><td>${money(limite)}</td><td>${money(totalEntregue)}</td><td>${money(saldoDisponivel)}</td><td class="no-print"><button class="btn danger" onclick="removeItem('grupos','${grupo.id}')">Excluir</button></td></tr>`;
+      }).join('') || '<tr><td colspan="5" class="muted">Nenhum grupo cadastrado.</td></tr>';
+      el.innerHTML = `<div class="card no-print"><h2>Novo cadastro</h2><form class="form-grid" data-form="grupos">${fields.map(f => inputField(f[0], f[1], f[2])).join('')}<div class="actions"><button class="btn" type="submit">Salvar</button></div></form></div><div class="card"><h2>Grupos cadastrados</h2><div class="table-wrap"><table><thead><tr><th>Nome do grupo</th><th>Saldo da semana</th><th>Total entregue</th><th>Saldo disponível</th><th class="no-print">Ações</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+      el.querySelector('form').onsubmit = event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.target).entries());
+        if (!data.nome) return alert('Preencha o nome do grupo.');
+        db.grupos.push({ id: id(), ...data });
+        event.target.reset();
+        save();
+      };
+    }
+
     function renderProdutos() {
       const el = document.getElementById('produtos');
       const canais = ['Urbana', 'Rural', 'Ambos'];
@@ -405,7 +445,7 @@
         const texto = `${p.codigo || ''} ${p.nome || ''} ${grupo} ${p.unidade || ''} ${p.lote || ''} ${p.observacao || ''}`.toLowerCase();
         const buscaOk = !produtosFiltro.busca || texto.includes(produtosFiltro.busca.toLowerCase());
         const canalOk = !produtosFiltro.canal || (p.canal_venda || 'Ambos') === produtosFiltro.canal;
-        return buscaOk && canalOk && produtoPeriodoOk(p, produtosFiltro.dataInicial, produtosFiltro.dataFinal);
+        return buscaOk && canalOk;
       });
       const rows = filtered.map(p => `<tr>
         <td>${escapeHtml(p.codigo || '-')}</td>
@@ -416,33 +456,27 @@
         <td>${escapeHtml(p.canal_venda || 'Ambos')}</td>
         <td>${money(p.preco_urbana)}</td>
         <td>${money(p.preco_rural)}</td>
-        <td>${escapeHtml(p.vigencia_inicio || '-')}</td>
-        <td>${escapeHtml(p.vigencia_fim || '-')}</td>
         <td>${escapeHtml(p.observacao || '-')}</td>
         <td class="no-print"><button class="btn danger" onclick="removeItem('produtos','${p.id}')">Excluir</button></td>
-      </tr>`).join('') || '<tr><td colspan="12" class="muted">Nenhum produto encontrado para os filtros selecionados.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="10" class="muted">Nenhum produto encontrado para os filtros selecionados.</td></tr>';
       el.innerHTML = `<div class="card no-print"><div class="sheet-toolbar"><div><h2>Novo produto</h2><p class="sheet-note">Cadastre manualmente ou use o botão destacado para importar sua planilha CSV de produtos.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtnTop" type="button">Baixar modelo CSV</button><button class="btn" id="importProdutosBtnTop" type="button">Importar CSV</button></div></div><form class="form-grid" id="produtoForm">
         <label>Código<input name="codigo" placeholder="Ex.: 001" /></label>
         <label>Produto<input name="nome" required placeholder="Nome do produto" /></label>
         <label>Grupo<select name="grupo_id"><option value="">Selecione</option>${db.grupos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('')}</select></label>
         <label>Unidade<input name="unidade" placeholder="kg, un, pct, cx" /></label>
-        <label>Lote<input name="lote" placeholder="Identificação do lote" /></label>
+        <label>Lote<input name="lote" value="${gerarLoteAtual()}" placeholder="Identificação do lote" /></label>
         <label>Canal de venda<select name="canal_venda">${canais.map(c => `<option>${c}</option>`).join('')}</select></label>
         <label>Preço urbana<input name="preco_urbana" type="number" step="0.01" /></label>
         <label>Preço rural<input name="preco_rural" type="number" step="0.01" /></label>
-        <label>Vigência inicial<input name="vigencia_inicio" type="date" /></label>
-        <label>Vigência final<input name="vigencia_fim" type="date" /></label>
         <label class="span-2">Observações<input name="observacao" placeholder="Ex.: sazonalidade, padrão, restrição ou entrega" /></label>
         <div class="actions"><button class="btn" type="submit">Adicionar à planilha</button></div>
       </form></div>
-      <div class="card no-print"><div class="sheet-toolbar"><div><h2>Filtros e importação da planilha</h2><p class="sheet-note">Use período e canal de venda para localizar produtos. Para upload, use CSV com cabeçalhos iguais ao modelo.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtn" type="button">Baixar modelo CSV</button><button class="btn secondary" id="importProdutosBtn" type="button">Importar CSV</button><button class="btn secondary" id="exportProdutosBtn" type="button">Baixar CSV</button><input id="produtosCsvInput" type="file" accept=".csv,text/csv" hidden /></div></div><form class="form-grid" id="produtoFiltroForm">
+      <div class="card no-print"><div class="sheet-toolbar"><div><h2>Filtros e importação da planilha</h2><p class="sheet-note">Use busca e canal de venda para localizar produtos. Para upload, use CSV com cabeçalhos iguais ao modelo.</p></div><div class="actions"><button class="btn secondary" id="modeloProdutosBtn" type="button">Baixar modelo CSV</button><button class="btn secondary" id="importProdutosBtn" type="button">Importar CSV</button><button class="btn secondary" id="exportProdutosBtn" type="button">Baixar CSV</button><input id="produtosCsvInput" type="file" accept=".csv,text/csv" hidden /></div></div><form class="form-grid" id="produtoFiltroForm">
         <label class="span-2">Buscar produto, código, grupo ou lote<input name="busca" value="${escapeHtml(produtosFiltro.busca)}" placeholder="Digite para pesquisar" /></label>
         <label>Canal<select name="canal"><option value="">Todos</option>${canais.map(c => `<option value="${c}" ${produtosFiltro.canal === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-        <label>Data inicial<input name="dataInicial" type="date" value="${escapeHtml(produtosFiltro.dataInicial)}" /></label>
-        <label>Data final<input name="dataFinal" type="date" value="${escapeHtml(produtosFiltro.dataFinal)}" /></label>
         <div class="actions"><button class="btn" type="submit">Aplicar filtros</button><button class="btn secondary" id="limparProdutoFiltro" type="button">Limpar</button></div>
       </form></div>
-      <div class="card"><div class="sheet-toolbar"><div><h2>Planilha de produtos</h2><p class="sheet-note">${filtered.length} de ${db.produtos.length} produto(s) exibido(s).</p></div></div><div class="table-wrap"><table class="sheet-table"><thead><tr><th>Código</th><th>Produto</th><th>Grupo</th><th>Unidade</th><th>Lote</th><th>Canal</th><th>Preço urbana</th><th>Preço rural</th><th>Vigência inicial</th><th>Vigência final</th><th>Observações</th><th class="no-print">Ações</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+      <div class="card"><div class="sheet-toolbar"><div><h2>Planilha de produtos</h2><p class="sheet-note">${filtered.length} de ${db.produtos.length} produto(s) exibido(s).</p></div></div><div class="table-wrap"><table class="sheet-table"><thead><tr><th>Código</th><th>Produto</th><th>Grupo</th><th>Unidade</th><th>Lote</th><th>Canal</th><th>Preço urbana</th><th>Preço rural</th><th>Observações</th><th class="no-print">Ações</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
       el.querySelector('#produtoForm').onsubmit = event => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.target).entries());
@@ -456,7 +490,7 @@
         produtosFiltro = Object.fromEntries(new FormData(event.target).entries());
         renderProdutos();
       };
-      el.querySelector('#limparProdutoFiltro').onclick = () => { produtosFiltro = { busca: '', canal: '', dataInicial: '', dataFinal: '' }; renderProdutos(); };
+      el.querySelector('#limparProdutoFiltro').onclick = () => { produtosFiltro = { busca: '', canal: '' }; renderProdutos(); };
       el.querySelector('#exportProdutosBtn').onclick = () => exportProdutosCsv(filtered);
       el.querySelector('#modeloProdutosBtn').onclick = () => exportProdutoModeloCsv();
       el.querySelector('#modeloProdutosBtnTop').onclick = () => exportProdutoModeloCsv();
@@ -477,7 +511,7 @@
     }
 
     function produtoCsvHeader() {
-      return ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Vigência inicial', 'Vigência final', 'Observações'];
+      return ['Código', 'Produto', 'Grupo', 'Unidade', 'Lote', 'Canal de venda', 'Preço urbana', 'Preço rural', 'Observações'];
     }
 
     function decodeCsvText(buffer) {
@@ -495,7 +529,7 @@
 
     function exportProdutoModeloCsv() {
       const header = produtoCsvHeader();
-      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', 'Lote 01', 'Ambos', '10,00', '12,00', '2026-01-01', '2026-12-31', 'Observação opcional'];
+      const example = ['001', 'Produto exemplo', 'Grupo exemplo', 'kg', gerarLoteAtual(), 'Ambos', '10,00', '12,00', 'Observação opcional'];
       downloadFile('modelo-produtos-aagrifam.csv', [header.map(csvCell).join(';'), example.map(csvCell).join(';')].join('\n'));
     }
 
@@ -503,7 +537,7 @@
       const header = produtoCsvHeader();
       const lines = produtos.map(p => [
         p.codigo || '', p.nome || '', byId('grupos', p.grupo_id)?.nome || '', p.unidade || '', p.lote || '', p.canal_venda || 'Ambos',
-        String(p.preco_urbana || '').replace('.', ','), String(p.preco_rural || '').replace('.', ','), p.vigencia_inicio || '', p.vigencia_fim || '', p.observacao || ''
+        String(p.preco_urbana || '').replace('.', ','), String(p.preco_rural || '').replace('.', ','), p.observacao || ''
       ].map(csvCell).join(';'));
       downloadFile(`produtos-aagrifam-${new Date().toISOString().slice(0,10)}.csv`, [header.map(csvCell).join(';'), ...lines].join('\n'));
     }
@@ -568,7 +602,7 @@
       const aliases = {
         codigo: ['codigo', 'cod'], nome: ['produto', 'nome', 'nomeproduto'], grupo: ['grupo', 'categoria'], unidade: ['unidade', 'un'], lote: ['lote'],
         canal: ['canal', 'canaldevenda'], precoUrbana: ['precourbana', 'precourbano', 'valorurbana', 'valorurbano'], precoRural: ['precorural', 'valorrural'],
-        vigenciaInicio: ['vigenciainicial', 'inicio', 'datainicial'], vigenciaFim: ['vigenciafinal', 'fim', 'datafinal'], observacao: ['observacoes', 'observacao', 'obs']
+        observacao: ['observacoes', 'observacao', 'obs']
       };
       const findIndex = names => names.map(name => header.indexOf(name)).find(index => index >= 0);
       const idx = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, findIndex(names)]));
@@ -579,9 +613,9 @@
         const nome = get(idx.nome);
         if (!nome) return;
         db.produtos.push({
-          id: id(), codigo: get(idx.codigo), nome, grupo_id: findOrCreateGrupo(get(idx.grupo)), unidade: get(idx.unidade), lote: get(idx.lote),
+          id: id(), codigo: get(idx.codigo), nome, grupo_id: findOrCreateGrupo(get(idx.grupo)), unidade: get(idx.unidade), lote: get(idx.lote) || gerarLoteAtual(),
           canal_venda: normalizeCanal(get(idx.canal)), preco_urbana: parseMoneyInput(get(idx.precoUrbana)), preco_rural: parseMoneyInput(get(idx.precoRural)),
-          vigencia_inicio: get(idx.vigenciaInicio), vigencia_fim: get(idx.vigenciaFim), observacao: get(idx.observacao)
+          observacao: get(idx.observacao)
         });
         imported++;
       });
@@ -596,21 +630,33 @@
         <label>Número<input name="numero" value="${String(db.romaneios.length + 1).padStart(4, '0')}" required /></label>
         <label>Data<input name="data" type="date" value="${new Date().toISOString().slice(0,10)}" required /></label>
         <label>Produtor<select name="produtor_id" required><option value="">Selecione</option>${db.produtores.map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('')}</select></label>
-        <label>Cliente<select name="cliente_id" required><option value="">Selecione</option>${db.clientes.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('')}</select></label>
-        <label>Status<select name="status"><option>Emitido</option><option>Entregue</option><option>Cancelado</option></select></label>
-        <label class="span-4">Itens do romaneio<textarea name="itens_texto" placeholder="Digite um item por linha: Produto | Quantidade | Valor unitário\nExemplo: Alface | 10 | 3.50" required></textarea></label>
+        <label>Cliente<select name="cliente_id" required><option value="">Selecione</option>${db.clientes.map(c => `<option value="${c.id}">${escapeHtml(c.nome)} (${escapeHtml(c.classificacao || 'Urbana')})</option>`).join('')}</select></label>
+        <label class="span-4">Itens do romaneio<textarea name="itens_texto" placeholder="Digite um item por linha: Produto | Quantidade
+Exemplo: Alface | 10
+O preço será preenchido automaticamente conforme a classificação Rural/Urbana do cliente." required></textarea></label>
         <div class="actions"><button class="btn" type="submit">Gerar romaneio</button></div>
       </form></div>
-      <div class="card printable"><h2>Romaneios emitidos</h2><div class="table-wrap"><table><thead><tr><th>Número</th><th>Data</th><th>Produtor</th><th>Cliente</th><th>Status</th><th>Total</th><th class="no-print">Ações</th></tr></thead><tbody>${db.romaneios.map(r => `<tr><td><strong>${escapeHtml(r.numero)}</strong></td><td>${escapeHtml(r.data)}</td><td>${escapeHtml(byId('produtores', r.produtor_id)?.nome || '-')}</td><td>${escapeHtml(byId('clientes', r.cliente_id)?.nome || '-')}</td><td><span class="tag">${escapeHtml(r.status)}</span></td><td>${money(r.valor_total)}</td><td class="no-print"><button class="btn secondary" onclick="printRomaneio('${r.id}')">Imprimir</button> <button class="btn danger" onclick="removeItem('romaneios','${r.id}')">Excluir</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nenhum romaneio emitido.</td></tr>'}</tbody></table></div><div id="printArea"></div></div>`;
+      <div class="card printable"><h2>Romaneios emitidos</h2><div class="table-wrap"><table><thead><tr><th>Número</th><th>Data</th><th>Produtor</th><th>Cliente</th><th>Total</th><th class="no-print">Ações</th></tr></thead><tbody>${db.romaneios.map(r => `<tr><td><strong>${escapeHtml(r.numero)}</strong></td><td>${escapeHtml(r.data)}</td><td>${escapeHtml(byId('produtores', r.produtor_id)?.nome || '-')}</td><td>${escapeHtml(byId('clientes', r.cliente_id)?.nome || '-')}</td><td>${money(r.valor_total)}</td><td class="no-print"><button class="btn secondary" onclick="printRomaneio('${r.id}')">Imprimir</button> <button class="btn danger" onclick="removeItem('romaneios','${r.id}')">Excluir</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nenhum romaneio emitido.</td></tr>'}</tbody></table></div><div id="printArea"></div></div>`;
       el.querySelector('#romaneioForm').onsubmit = event => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.target).entries());
-        const itens = data.itens_texto.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
-          const [produto, qtd, valor] = line.split('|').map(v => (v || '').trim());
-          return { produto, quantidade: Number(String(qtd).replace(',', '.')) || 0, valor_unitario: Number(String(valor).replace(',', '.')) || 0 };
+        const cliente = byId('clientes', data.cliente_id);
+        const itens = data.itens_texto.split('\\n').map(line => line.trim()).filter(Boolean).map(line => {
+          const [produtoDigitado, qtd, valorDigitado] = line.split('|').map(v => (v || '').trim());
+          const produtoCadastrado = produtoPorNome(produtoDigitado);
+          const precoAutomatico = precoProdutoParaCliente(produtoCadastrado, cliente);
+          const valorUnitario = parseMoneyInput(precoAutomatico || valorDigitado);
+          return {
+            produto: produtoCadastrado?.nome || produtoDigitado,
+            produto_id: produtoCadastrado?.id || '',
+            grupo_id: produtoCadastrado?.grupo_id || '',
+            quantidade: Number(String(qtd).replace(',', '.')) || 0,
+            valor_unitario: Number(valorUnitario) || 0
+          };
         });
         const total = itens.reduce((sum, item) => sum + item.quantidade * item.valor_unitario, 0);
-        db.romaneios.push({ id: id(), ...data, itens, valor_total: total });
+        const { itens_texto, ...romaneio } = data;
+        db.romaneios.push({ id: id(), ...romaneio, itens, valor_total: total });
         event.target.reset();
         save();
       };
@@ -634,7 +680,7 @@
       const produtor = byId('produtores', r.produtor_id)?.nome || '-';
       const cliente = byId('clientes', r.cliente_id)?.nome || '-';
       const area = document.getElementById('printArea');
-      area.innerHTML = `<hr><h2>Romaneio nº ${escapeHtml(r.numero)}</h2><p><strong>Data:</strong> ${escapeHtml(r.data)} · <strong>Status:</strong> ${escapeHtml(r.status)}</p><p><strong>Produtor:</strong> ${escapeHtml(produtor)}<br><strong>Cliente:</strong> ${escapeHtml(cliente)}</p><table><thead><tr><th>Produto</th><th>Quantidade</th><th>Valor unitário</th><th>Total</th></tr></thead><tbody>${r.itens.map(i => `<tr><td>${escapeHtml(i.produto)}</td><td>${i.quantidade}</td><td>${money(i.valor_unitario)}</td><td>${money(i.quantidade * i.valor_unitario)}</td></tr>`).join('')}</tbody><tfoot><tr><th colspan="3">Total geral</th><th>${money(r.valor_total)}</th></tr></tfoot></table><br><br><p>Assinatura do responsável: ________________________________________</p>`;
+      area.innerHTML = `<hr><h2>Romaneio nº ${escapeHtml(r.numero)}</h2><p><strong>Data:</strong> ${escapeHtml(r.data)}</p><p><strong>Produtor:</strong> ${escapeHtml(produtor)}<br><strong>Cliente:</strong> ${escapeHtml(cliente)}</p><table><thead><tr><th>Produto</th><th>Quantidade</th><th>Valor unitário</th><th>Total</th></tr></thead><tbody>${r.itens.map(i => `<tr><td>${escapeHtml(i.produto)}</td><td>${i.quantidade}</td><td>${money(i.valor_unitario)}</td><td>${money(i.quantidade * i.valor_unitario)}</td></tr>`).join('')}</tbody><tfoot><tr><th colspan="3">Total geral</th><th>${money(r.valor_total)}</th></tr></tfoot></table><br><br><p>Assinatura do responsável: ________________________________________</p>`;
       setTimeout(() => window.print(), 100);
     };
 
@@ -643,12 +689,14 @@
       const grupo1 = { id: id(), nome: 'Hortaliças', limite_semanal: 500 };
       const grupo2 = { id: id(), nome: 'Frutas', limite_semanal: 420 };
       const produtor = { id: id(), nome: 'Produtor Exemplo', documento: '000.000.000-00', telefone: '(44) 99999-0000', municipio: 'Colorado/PR', status: 'Ativo', observacao: 'Cadastro de demonstração' };
-      const cliente = { id: id(), nome: 'Escola Municipal Exemplo', classificacao: 'Instituição', municipio: 'Colorado/PR', nucleo: 'NRE', endereco: 'Endereço de demonstração', telefone: '(44) 3333-0000' };
+      const cliente = { id: id(), nome: 'Escola Municipal Exemplo', classificacao: 'Urbana', municipio: 'Colorado/PR', nucleo: 'NRE', endereco: 'Endereço de demonstração', telefone: '(44) 3333-0000' };
       db.grupos.push(grupo1, grupo2);
       db.produtores.push(produtor);
       db.clientes.push(cliente);
-      db.produtos.push({ id: id(), nome: 'Alface', grupo_id: grupo1.id, unidade: 'un', lote: 'A1', preco_urbana: 3.5, preco_rural: 3.3 }, { id: id(), nome: 'Banana', grupo_id: grupo2.id, unidade: 'kg', lote: 'B1', preco_urbana: 5.2, preco_rural: 5.0 });
-      db.romaneios.push({ id: id(), numero: '0001', data: new Date().toISOString().slice(0,10), produtor_id: produtor.id, cliente_id: cliente.id, status: 'Emitido', itens: [{ produto: 'Alface', quantidade: 20, valor_unitario: 3.5 }, { produto: 'Banana', quantidade: 30, valor_unitario: 5.2 }], valor_total: 226 });
+      const produto1 = { id: id(), nome: 'Alface', grupo_id: grupo1.id, unidade: 'un', lote: gerarLoteAtual(), preco_urbana: 3.5, preco_rural: 3.3 };
+      const produto2 = { id: id(), nome: 'Banana', grupo_id: grupo2.id, unidade: 'kg', lote: gerarLoteAtual(), preco_urbana: 5.2, preco_rural: 5.0 };
+      db.produtos.push(produto1, produto2);
+      db.romaneios.push({ id: id(), numero: '0001', data: new Date().toISOString().slice(0,10), produtor_id: produtor.id, cliente_id: cliente.id, itens: [{ produto: 'Alface', produto_id: produto1.id, grupo_id: grupo1.id, quantidade: 20, valor_unitario: 3.5 }, { produto: 'Banana', produto_id: produto2.id, grupo_id: grupo2.id, quantidade: 30, valor_unitario: 5.2 }], valor_total: 226 });
       save();
     }
 
