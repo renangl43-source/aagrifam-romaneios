@@ -592,7 +592,24 @@
       return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
     }
 
+    function detectCsvDelimiter(text) {
+      const firstLine = String(text || '').split(/\r?\n/).find(line => line.trim()) || '';
+      const countOutsideQuotes = delimiter => {
+        let count = 0, quoted = false;
+        for (let i = 0; i < firstLine.length; i++) {
+          const ch = firstLine[i];
+          const next = firstLine[i + 1];
+          if (ch === '"' && quoted && next === '"') { i++; continue; }
+          if (ch === '"') { quoted = !quoted; continue; }
+          if (ch === delimiter && !quoted) count++;
+        }
+        return count;
+      };
+      return countOutsideQuotes(';') >= countOutsideQuotes(',') ? ';' : ',';
+    }
+
     function parseCsv(text) {
+      const delimiter = detectCsvDelimiter(text);
       const rows = [];
       let row = [], cell = '', quoted = false;
       for (let i = 0; i < text.length; i++) {
@@ -600,7 +617,7 @@
         const next = text[i + 1];
         if (ch === '"' && quoted && next === '"') { cell += '"'; i++; continue; }
         if (ch === '"') { quoted = !quoted; continue; }
-        if ((ch === ';' || ch === ',') && !quoted) { row.push(cell.trim()); cell = ''; continue; }
+        if (ch === delimiter && !quoted) { row.push(cell.trim()); cell = ''; continue; }
         if ((ch === '\n' || ch === '\r') && !quoted) {
           if (ch === '\r' && next === '\n') i++;
           row.push(cell.trim());
